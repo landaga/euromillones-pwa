@@ -12,6 +12,15 @@
 .resultTitle{font-size:13px;font-weight:800;margin-bottom:6px}
 .hitLine{display:flex;justify-content:space-between;gap:8px;padding:4px 0;font-size:13px}
 .prize{font-weight:800}
+.summaryBox{margin-top:10px;padding:12px;border-radius:12px;background:#eef4fb;border:1px solid #c8d9ea}
+.summaryTitle{font-size:13px;font-weight:800;margin-bottom:6px}
+.summaryStats{display:flex;gap:8px;flex-wrap:wrap}
+.badge{display:inline-flex;align-items:center;min-height:30px;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:800;border:1px solid var(--border);background:#fff}
+.badge.hit{background:#eef8f0;border-color:#b9d9bf}
+.badge.no{background:#f6f7f8;border-color:#d7dde3}
+.badge.pending{background:#fff8e7;border-color:#ead69b}
+.betResult{margin-top:6px;padding:8px 10px;border-radius:9px;background:#fff;border:1px solid #e6eaee}
+.betResult strong{display:block;margin-bottom:2px}
 .nextDraw{font-size:13px;color:var(--p);font-weight:700;margin-top:10px}.empty{grid-column:1/-1;background:#fff;border:1px dashed var(--border);border-radius:14px;padding:24px;text-align:center;color:var(--muted)}.nav{position:fixed;left:0;right:0;bottom:0;z-index:10;display:grid;grid-template-columns:repeat(4,1fr);background:#fff;border-top:1px solid var(--border);padding:7px 8px calc(7px + env(safe-area-inset-bottom))}.nav button{border:0;background:transparent;color:var(--muted);font-size:12px;font-weight:700;padding:9px 2px;border-radius:9px}.nav button.active{background:#eaf2f8;color:var(--p)}@media(min-width:700px){.stats{grid-template-columns:repeat(4,1fr)}.nav{left:50%;right:auto;transform:translateX(-50%);width:680px;border:1px solid var(--border);border-bottom:0;border-radius:16px 16px 0 0}}
 </style>
 </head>
@@ -111,6 +120,7 @@ function inferLegacyDrawDate(ts){
 function resultForDate(drawDate){
   return draws.find(d=>dateKeyUTC(d.date)===drawDate)||null
 }
+
 function renderSaved(){
   let a=JSON.parse(localStorage.getItem(SK)||'[]');
   if(!a.length){
@@ -118,20 +128,69 @@ function renderSaved(){
     $('clear').classList.add('hidden');
     return
   }
-  $('saved').innerHTML=a.map(x=>{
+
+  let totalChecked=0,totalPending=0,totalPrizeBets=0,totalNoPrizeBets=0,bestN=0,bestS=0;
+
+  const blocks=a.map(x=>{
     const dd=x.drawDate||inferLegacyDrawDate(x.ts);
     const result=resultForDate(dd);
     let resultHtml='';
+
     if(result){
-      resultHtml=`<div class="resultBox ok"><div class="resultTitle">Resultado ${fdate(result.date)}: ${result.nums.map(n=>String(n).padStart(2,'0')).join(' ')} + ★ ${result.stars.map(s=>String(s).padStart(2,'0')).join(' ')}</div>${x.bets.map((b,i)=>{let[n,s]=hits(b,result),cat=prizeCategory(n,s);return `<div class="hitLine"><span>Apuesta ${i+1}: ${n} números + ${s} estrellas</span><span class="prize">${cat?`Categoría ${cat}`:'Sin premio'}</span></div>`}).join('')}</div>`
+      totalChecked++;
+      let prizeCount=0,noPrizeCount=0;
+
+      const betResults=x.bets.map((b,i)=>{
+        let[n,s]=hits(b,result),cat=prizeCategory(n,s);
+        if(cat){prizeCount++;totalPrizeBets++}else{noPrizeCount++;totalNoPrizeBets++}
+        if(n>bestN || (n===bestN && s>bestS)){bestN=n;bestS=s}
+
+        return `<div class="betResult">
+          <strong>Apuesta ${i+1}: ${n} número${n===1?'':'s'} + ${s} estrella${s===1?'':'s'}</strong>
+          <span class="badge ${cat?'hit':'no'}">${cat?`Premio · categoría ${cat}`:'Sin premio'}</span>
+        </div>`
+      }).join('');
+
+      resultHtml=`<div class="resultBox ok">
+        <div class="resultTitle">Resultado ${fdate(result.date)}: ${result.nums.map(n=>String(n).padStart(2,'0')).join(' ')} + ★ ${result.stars.map(s=>String(s).padStart(2,'0')).join(' ')}</div>
+        <div class="summaryBox">
+          <div class="summaryTitle">Resumen de este sorteo</div>
+          <div class="summaryStats">
+            <span class="badge ${prizeCount?'hit':'no'}">${prizeCount} apuesta${prizeCount===1?'':'s'} con premio</span>
+            <span class="badge no">${noPrizeCount} sin premio</span>
+          </div>
+        </div>
+        ${betResults}
+      </div>`
     }else{
-      resultHtml=`<div class="resultBox pending"><div class="resultTitle">Pendiente del sorteo ${dd.split('-').reverse().join('/')}</div><div class="muted">Actualiza el histórico después del sorteo y pulsa “Comprobar resultados”.</div></div>`
+      totalPending++;
+      resultHtml=`<div class="resultBox pending">
+        <div class="resultTitle">Pendiente del sorteo ${dd.split('-').reverse().join('/')}</div>
+        <div class="muted">Actualiza el histórico después del sorteo y pulsa “Comprobar resultados”.</div>
+      </div>`
     }
-    return `<div class="saved"><div class="d">Guardadas: ${new Intl.DateTimeFormat('es-ES',{dateStyle:'medium',timeStyle:'short'}).format(new Date(x.ts))} · Sorteo: ${dd.split('-').reverse().join('/')}</div>${x.bets.map((b,i)=>`<div class="l">${i+1}. ${b.nums.map(n=>String(n).padStart(2,'0')).join(' ')} + ★ ${b.stars.map(s=>String(s).padStart(2,'0')).join(' ')}</div>`).join('')}${resultHtml}</div>`
+
+    return `<div class="saved">
+      <div class="d">Guardadas: ${new Intl.DateTimeFormat('es-ES',{dateStyle:'medium',timeStyle:'short'}).format(new Date(x.ts))} · Sorteo: ${dd.split('-').reverse().join('/')}</div>
+      ${x.bets.map((b,i)=>`<div class="l">${i+1}. ${b.nums.map(n=>String(n).padStart(2,'0')).join(' ')} + ★ ${b.stars.map(s=>String(s).padStart(2,'0')).join(' ')}</div>`).join('')}
+      ${resultHtml}
+    </div>`
   }).join('');
+
+  const globalSummary=`<div class="summaryBox" style="margin-bottom:12px">
+    <div class="summaryTitle">Resumen global</div>
+    <div class="summaryStats">
+      <span class="badge hit">${totalPrizeBets} apuesta${totalPrizeBets===1?'':'s'} con premio</span>
+      <span class="badge no">${totalNoPrizeBets} sin premio</span>
+      <span class="badge pending">${totalPending} sorteo${totalPending===1?'':'s'} pendiente${totalPending===1?'':'s'}</span>
+      ${totalChecked?`<span class="badge">Mejor: ${bestN} + ${bestS}</span>`:''}
+    </div>
+  </div>`;
+
+  $('saved').innerHTML=globalSummary+blocks;
   $('clear').classList.remove('hidden')
 }
-async function checkSavedResults(){
+function checkSavedResults(){
   if(!draws.length){alert('Actualiza primero el histórico.');return}
   renderSaved();
   const a=JSON.parse(localStorage.getItem(SK)||'[]');
