@@ -1,4 +1,4 @@
-const CACHE = "euromillones-pwa-github-v2";
+const CACHE = "euromillones-pwa-github-v2-1";
 const BASE = self.registration.scope;
 
 const ASSETS = [
